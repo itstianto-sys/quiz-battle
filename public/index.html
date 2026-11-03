@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QUIZ BATTLE – Realtime Multiplayer Quiz</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            purple: '#7c3aed',
+                            blue: '#2563eb',
+                            pink: '#db2777',
+                            dark: '#0f172a'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Socket.io Client -->
+    <script src="/socket.io/socket.io.js"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans selection:bg-purple-500 selection:text-white">
+
+    <!-- APP CONTAINER -->
+    <div id="app" class="min-h-screen flex flex-col">
+
+        <!-- 1. HOME / SELECTION VIEW -->
+        <div id="view-home" class="flex-1 flex flex-col items-center justify-center p-6 text-center">
+            <div class="glass p-8 rounded-3xl shadow-2xl max-w-md w-full border border-purple-500/20">
+                <h1 class="text-4xl font-extrabold bg-gradient-to-r from-purple-400 via-pink-500 to-blue-400 bg-clip-text text-transparent mb-2">QUIZ BATTLE</h1>
+                <p class="text-slate-400 mb-8">Platform Kuis Multiplayer Real-time</p>
+                
+                <div class="space-y-4">
+                    <button onclick="switchView('view-participant-login')" class="w-full py-4 px-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 font-bold rounded-2xl shadow-lg transition transform hover:-translate-y-0.5">
+                        🎮 Gabung Sebagai Peserta
+                    </button>
+                    <button onclick="switchView('view-admin-login')" class="w-full py-4 px-6 bg-slate-800 hover:bg-slate-700 font-semibold rounded-2xl border border-slate-700 transition">
+                        🔑 Login Admin / Host
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. ADMIN LOGIN VIEW -->
+        <div id="view-admin-login" class="hidden flex-1 flex flex-col items-center justify-center p-6">
+            <div class="glass p-8 rounded-3xl shadow-2xl max-w-md w-full">
+                <h2 class="text-2xl font-bold mb-6 text-center text-purple-400">Login Admin</h2>
+                <form id="admin-login-form" onsubmit="handleAdminLogin(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">Username</label>
+                        <input type="text" id="admin-user" required class="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl focus:outline-none focus:border-purple-500" placeholder="admin">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">Password</label>
+                        <input type="password" id="admin-pass" required class="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl focus:outline-none focus:border-purple-500" placeholder="admin123">
+                    </div>
+                    <button type="submit" class="w-full py-3 bg-purple-600 hover:bg-purple-500 font-bold rounded-xl transition">Masuk Dashboard</button>
+                </form>
+                <button onclick="switchView('view-home')" class="mt-4 w-full text-sm text-slate-400 hover:text-white">← Kembali</button>
+            </div>
+        </div>
+
+        <!-- 3. ADMIN DASHBOARD & QUIZ BUILDER VIEW -->
+        <div id="view-admin-dashboard" class="hidden flex-1 flex flex-col p-6 max-w-6xl mx-auto w-full">
+            <div class="flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
+                <div>
+                    <h1 class="text-3xl font-extrabold text-purple-400">Admin Dashboard</h1>
+                    <p class="text-sm text-slate-400">Kelola kuis, buat room, dan pantau jalannya permainan.</p>
+                </div>
+                <button onclick="logoutAdmin()" class="px-4 py-2 bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded-xl border border-red-500/30 text-sm">Logout</button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Create Quiz Card -->
+                <div class="glass p-6 rounded-3xl lg:col-span-1">
+                    <h3 class="text-xl font-bold mb-4 text-purple-300">📝 Buat Kuis Baru</h3>
+                    <form id="quiz-create-form" onsubmit="createQuiz(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Judul Kuis</label>
+                            <input type="text" id="quiz-title" required class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Deskripsi Kuis</label>
+                            <textarea id="quiz-desc" rows="2" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm"></textarea>
+                        </div>
+
+                        <div class="border-t border-slate-800 pt-3">
+                            <h4 class="font-semibold text-sm mb-2 text-pink-400">Pertanyaan Pertama</h4>
+                            <input type="text" id="q-text" placeholder="Tulis pertanyaan..." required class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm mb-2">
+                            <div class="grid grid-cols-2 gap-2 mb-2">
+                                <input type="text" id="opt-a" placeholder="Pilihan A (Merah)" required class="px-3 py-2 bg-red-950/40 border border-red-700/50 rounded-lg text-xs">
+                                <input type="text" id="opt-b" placeholder="Pilihan B (Biru)" required class="px-3 py-2 bg-blue-950/40 border border-blue-700/50 rounded-lg text-xs">
+                                <input type="text" id="opt-c" placeholder="Pilihan C (Kuning)" required class="px-3 py-2 bg-yellow-950/40 border border-yellow-700/50 rounded-lg text-xs">
+                                <input type="text" id="opt-d" placeholder="Pilihan D (Hijau)" required class="px-3 py-2 bg-green-950/40 border border-green-700/50 rounded-lg text-xs">
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[10px] text-slate-400 mb-1">Jawaban Benar</label>
+                                    <select id="correct-ans" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs">
+                                        <option value="0">A (Merah)</option>
+                                        <option value="1">B (Biru)</option>
+                                        <option value="2">C (Kuning)</option>
+                                        <option value="3">D (Hijau)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-slate-400 mb-1">Durasi (Detik)</label>
+                                    <select id="q-timer" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs">
+                                        <option value="5">5 Detik</option>
+                                        <option value="10" selected>10 Detik</option>
+                                        <option value="15">15 Detik</option>
+                                        <option value="20">20 Detik</option>
+                                        <option value="30">30 Detik</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="w-full py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 font-bold rounded-xl text-sm transition">Simpan Kuis & Buat Room</button>
+                    </form>
+                </div>
+
+                <!-- Active Quiz / Room Manager -->
+                <div class="glass p-6 rounded-3xl lg:col-span-2 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4 text-blue-300">🎮 Kontrol Room & Game</h3>
+                        <div id="room-control-panel" class="space-y-4">
+                            <div class="p-4 bg-slate-900/60 rounded-2xl border border-slate-800 flex justify-between items-center">
+                                <div>
+                                    <p class="text-xs text-slate-400">Status Room</p>
+                                    <p class="text-lg font-bold text-emerald-400" id="room-status-text">Belum Ada Room Aktif</p>
+                                </div>
+                                <div id="room-pin-display" class="hidden text-right">
+                                    <p class="text-xs text-slate-400">PIN ROOM</p>
+                                    <p class="text-3xl font-black tracking-widest text-purple-400" id="current-pin">------</p>
+                                </div>
+                            </div>
+
+                            <!-- Participant List Preview -->
+                            <div>
+                                <h4 class="text-sm font-semibold text-slate-300 mb-2">Peserta Bergabung (<span id="participant-count">0</span>/100)</h4>
+                                <div id="participant-list-grid" class="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-900/40 rounded-xl border border-slate-800 text-xs">
+                                    <span class="text-slate-500 col-span-full text-center py-4">Belum ada peserta yang bergabung.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 pt-4 border-t border-slate-800 flex gap-4">
+                        <button id="btn-start-game" onclick="startQuizGame()" disabled class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 font-bold rounded-xl transition">🚀 Start Game</button>
+                        <button onclick="downloadResultsCSV()" class="px-4 py-3 bg-slate-800 hover:bg-slate-700 font-semibold rounded-xl text-sm border border-slate-700">📥 Export Hasil CSV</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. PARTICIPANT LOGIN / JOIN VIEW -->
+        <div id="view-participant-login" class="hidden flex-1 flex flex-col items-center justify-center p-6">
+            <div class="glass p-8 rounded-3xl shadow-2xl max-w-md w-full">
+                <h2 class="text-2xl font-bold mb-6 text-center bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Gabung Quiz Battle</h2>
+                <form id="join-form" onsubmit="joinRoom(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">PIN Room (6 Digit)</label>
+                        <input type="text" id="join-pin" required maxlength="6" class="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-center text-2xl tracking-widest uppercase font-black focus:outline-none focus:border-purple-500" placeholder="123456">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">Nama Kamu</label>
+                        <input type="text" id="join-name" required class="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl focus:outline-none focus:border-purple-500" placeholder="Ketik nama...">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-2">Pilih Avatar</label>
+                        <div id="avatar-selector" class="grid grid-cols-5 gap-2 max-h-36 overflow-y-auto p-2 bg-slate-900/60 rounded-xl border border-slate-800">
+                            <!-- Populated via JS -->
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 font-bold rounded-xl transition shadow-lg">JOIN GAME</button>
+                </form>
+                <button onclick="switchView('view-home')" class="mt-4 w-full text-sm text-slate-400 hover:text-white">← Kembali</button>
+            </div>
+        </div>
+
+        <!-- 5. PARTICIPANT LOBBY VIEW -->
+        <div id="view-lobby" class="hidden flex-1 flex flex-col items-center justify-center p-6 text-center">
+            <div class="glass p-8 rounded-3xl shadow-2xl max-w-md w-full">
+                <p class="text-xs text-purple-400 uppercase tracking-widest mb-1">Menunggu Host Memulai...</p>
+                <h2 class="text-3xl font-black mb-4" id="lobby-room-pin">PIN: ------</h2>
+                <div class="w-20 h-20 mx-auto rounded-full bg-purple-600/20 border-2 border-purple-500 flex items-center justify-center text-4xl mb-4" id="my-avatar-display">🤖</div>
+                <h3 class="text-xl font-bold mb-1" id="my-name-display">Nama Peserta</h3>
+                <p class="text-sm text-slate-400 mb-6">Kamu sudah masuk di room! Siap-siap ya.</p>
+                <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-xs text-slate-400 animate-pulse">
+                    Host akan segera memulai permainan...
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. GAME SCREEN (4 COLOR BUTTONS) -->
+        <div id="view-game" class="hidden flex-1 flex flex-col p-4 max-w-4xl mx-auto w-full justify-between">
+            <div class="flex justify-between items-center glass px-6 py-3 rounded-2xl mb-4">
+                <div>
+                    <span class="text-xs text-slate-400">Pertanyaan</span>
+                    <p class="text-lg font-bold" id="game-q-num">1 / 1</p>
+                </div>
+                <div class="text-center">
+                    <span class="text-xs text-slate-400">Sisa Waktu</span>
+                    <p class="text-2xl font-black text-amber-400" id="game-timer">10</p>
+                </div>
+                <div class="text-right">
+                    <span class="text-xs text-slate-400">Skor Kamu</span>
+                    <p class="text-lg font-bold text-purple-400" id="game-score">0</p>
+                </div>
+            </div>
+
+            <!-- Question Box -->
+            <div class="glass p-8 rounded-3xl text-center mb-6 shadow-xl">
+                <h2 class="text-2xl sm:text-3xl font-extrabold text-white" id="game-question-text">Memuat Pertanyaan...</h2>
+            </div>
+
+            <!-- 4 Color Buttons (Kahoot Style) -->
+            <div class="grid grid-cols-2 gap-4 flex-1 mb-4">
+                <button onclick="submitAnswer(0)" id="btn-ans-0" class="bg-red-600 hover:bg-red-500 active:scale-95 transition rounded-3xl p-6 flex flex-col items-center justify-center text-white shadow-lg text-xl font-bold">
+                    <span class="text-3xl mb-2">▲</span> <span id="text-opt-0">Pilihan A</span>
+                </button>
+                <button onclick="submitAnswer(1)" id="btn-ans-1" class="bg-blue-600 hover:bg-blue-500 active:scale-95 transition rounded-3xl p-6 flex flex-col items-center justify-center text-white shadow-lg text-xl font-bold">
+                    <span class="text-3xl mb-2">◆</span> <span id="text-opt-1">Pilihan B</span>
+                </button>
+                <button onclick="submitAnswer(2)" id="btn-ans-2" class="bg-yellow-500 hover:bg-yellow-400 active:scale-95 transition rounded-3xl p-6 flex flex-col items-center justify-center text-slate-950 shadow-lg text-xl font-bold">
+                    <span class="text-3xl mb-2">●</span> <span id="text-opt-2">Pilihan C</span>
+                </button>
+                <button onclick="submitAnswer(3)" id="btn-ans-3" class="bg-green-600 hover:bg-green-500 active:scale-95 transition rounded-3xl p-6 flex flex-col items-center justify-center text-white shadow-lg text-xl font-bold">
+                    <span class="text-3xl mb-2">■</span> <span id="text-opt-3">Pilihan D</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 7. INTERIM PODIUM VIEW -->
+        <div id="view-podium" class="hidden flex-1 flex flex-col items-center justify-center p-6 text-center">
+            <div class="glass p-8 rounded-3xl shadow-2xl max-w-xl w-full">
+                <h2 class="text-3xl font-extrabold text-amber-400 mb-2">🏆 Podium Sementara</h2>
+                <p class="text-sm text-slate-400 mb-6">Peringkat berdasarkan kecepatan & ketepatan jawaban.</p>
+                <div id="podium-list" class="space-y-3 mb-6">
+                    <!-- Populated via Socket -->
+                </div>
+                <p class="text-xs text-slate-500">Menunggu host melanjutkan pertanyaan...</p>
+            </div>
+        </div>
+
+        <!-- 8. FINAL RESULTS VIEW -->
+        <div id="view-result" class="hidden flex-1 flex flex-col items-center justify-center p-6 text-center">
+            <div class="glass p-8 rounded-3xl shadow-2xl max-w-xl w-full">
+                <h1 class="text-4xl font-black bg-gradient-to-r from-amber-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">PERTANDINGAN SELESAI!</h1>
+                <p class="text-slate-300 mb-6">Inilah juaranya!</p>
+                
+                <div id="final-podium" class="grid grid-cols-3 gap-4 mb-8 items-end">
+                    <!-- 2nd, 1st, 3rd -->
+                </div>
+
+                <button onclick="location.reload()" class="w-full py-3 bg-purple-600 hover:bg-purple-500 font-bold rounded-xl transition">Kembali ke Beranda</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- FRONTEND APP LOGIC SCRIPT -->
+    <script>
+        const socket = io();
+        const avatars = ['🤖','🚀','忍者','🐱','🐼','👽','🦁','🐰','🐲','🦸','🏴‍☠️','🧙','🐧','🦊','🐻','🦖','👻','👾','🛡️','⚡'];
+        
+        let currentUser = { name: '', avatar: '🤖', pin: '', score: 0 };
+        let currentRoomPin = '';
+
+        // Init Avatar Selector
+        const avatarContainer = document.getElementById('avatar-selector');
+        avatars.forEach((av, idx) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `p-2 text-2xl rounded-xl border transition ${idx === 0 ? 'border-purple-500 bg-purple-500/20' : 'border-slate-800 hover:bg-slate-800'}`;
+            btn.innerText = av;
+            btn.onclick = () => {
+                document.querySelectorAll('#avatar-selector button').forEach(b => b.className = 'p-2 text-2xl rounded-xl border border-slate-800 hover:bg-slate-800');
+                btn.className = 'p-2 text-2xl rounded-xl border border-purple-500 bg-purple-500/20';
+                currentUser.avatar = av;
+                document.getElementById('my-avatar-display').innerText = av;
+            };
+            avatarContainer.appendChild(btn);
+        });
+
+        function switchView(viewId) {
+            ['view-home', 'view-admin-login', 'view-admin-dashboard', 'view-participant-login', 'view-lobby', 'view-game', 'view-podium', 'view-result'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            document.getElementById(viewId).classList.remove('hidden');
+        }
+
+        // Admin Login Handler
+        function handleAdminLogin(e) {
+            e.preventDefault();
+            const u = document.getElementById('admin-user').value;
+            const p = document.getElementById('admin-pass').value;
+            if (u === 'admin' && p === 'admin123') {
+                switchView('view-admin-dashboard');
+            } else {
+                alert('Username atau password salah! Gunakan admin / admin123');
+            }
+        }
+
+        function logoutAdmin() {
+            switchView('view-home');
+        }
+
+        // Create Quiz & Room Handler
+        function createQuiz(e) {
+            e.preventDefault();
+            const title = document.getElementById('quiz-title').value;
+            const desc = document.getElementById('quiz-desc').value;
+            const qText = document.getElementById('q-text').value;
+            const opts = [
+                document.getElementById('opt-a').value,
+                document.getElementById('opt-b').value,
+                document.getElementById('opt-c').value,
+                document.getElementById('opt-d').value
+            ];
+            const correct = parseInt(document.getElementById('correct-ans').value);
+            const timer = parseInt(document.getElementById('q-timer').value);
+
+            const quizData = {
+                title,
+                description: desc,
+                questions: [{ question: qText, options: opts, correct, timer }]
+            };
+
+            socket.emit('admin-create-room', quizData, (response) => {
+                if (response.success) {
+                    currentRoomPin = response.pin;
+                    document.getElementById('current-pin').innerText = response.pin;
+                    document.getElementById('room-pin-display').classList.remove('hidden');
+                    document.getElementById('room-status-text').innerText = 'Room Aktif & Menunggu Peserta';
+                    document.getElementById('btn-start-game').removeAttribute('disabled');
+                    alert('Kuis berhasil dibuat! Room PIN: ' + response.pin);
+                }
+            });
+        }
+
+        // Start Game Handler
+        function startQuizGame() {
+            socket.emit('admin-start-game', { pin: currentRoomPin });
+        }
+
+        // Participant Join Handler
+        function joinRoom(e) {
+            e.preventDefault();
+            const pin = document.getElementById('join-pin').value.toUpperCase();
+            const name = document.getElementById('join-name').value;
+            currentUser.name = name;
+            currentUser.pin = pin;
+
+            socket.emit('participant-join', { pin, name, avatar: currentUser.avatar }, (res) => {
+                if (res.success) {
+                    document.getElementById('lobby-room-pin').innerText = 'PIN: ' + pin;
+                    document.getElementById('my-name-display').innerText = name;
+                    switchView('view-lobby');
+                } else {
+                    alert(res.message || 'Gagal bergabung ke room.');
+                }
+            });
+        }
+
+        // Submit Answer Handler
+        function submitAnswer(optionIndex) {
+            socket.emit('participant-answer', { pin: currentUser.pin, name: currentUser.name, answer: optionIndex });
+            // Disable buttons after answer
+            for(let i=0; i<4; i++) {
+                document.getElementById(`btn-ans-${i}`).classList.add('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        // CSV Export
+        function downloadResultsCSV() {
+            socket.emit('admin-export-results', { pin: currentRoomPin }, (csvData) => {
+                if(!csvData) { alert('Belum ada data hasil.'); return; }
+                const blob = new Blob([csvData], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.setAttribute('href', url);
+                a.setAttribute('download', `quiz-results-${currentRoomPin}.csv`);
+                a.click();
+            });
+        }
+
+        // --- SOCKET EVENT LISTENERS ---
+        socket.on('update-participants', (participants) => {
+            document.getElementById('participant-count').innerText = participants.length;
+            const grid = document.getElementById('participant-list-grid');
+            if (participants.length === 0) {
+                grid.innerHTML = '<span class="text-slate-500 col-span-full text-center py-4">Belum ada peserta yang bergabung.</span>';
+                return;
+            }
+            grid.innerHTML = participants.map(p => `
+                <div class="flex items-center gap-1 p-2 bg-slate-800/80 rounded-lg">
+                    <span class="text-base">${p.avatar}</span>
+                    <span class="truncate font-medium text-white">${p.name}</span>
+                </div>
+            `).join('');
+        });
+
+        socket.on('game-started', () => {
+            switchView('view-game');
+        });
+
+        socket.on('next-question', (data) => {
+            // Reset button states
+            for(let i=0; i<4; i++) {
+                const btn = document.getElementById(`btn-ans-${i}`);
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                document.getElementById(`text-opt-${i}`).innerText = data.options[i];
+            }
+            document.getElementById('game-q-num').innerText = `${data.questionIndex + 1} / ${data.totalQuestions}`;
+            document.getElementById('game-question-text').innerText = data.question;
+            document.getElementById('game-timer').innerText = data.timer;
+            switchView('view-game');
+        });
+
+        socket.on('timer-tick', (timeLeft) => {
+            document.getElementById('game-timer').innerText = timeLeft;
+        });
+
+        socket.on('show-podium', (leaderboard) => {
+            switchView('view-podium');
+            const list = document.getElementById('podium-list');
+            list.innerHTML = leaderboard.slice(0, 5).map((p, idx) => `
+                <div class="flex justify-between items-center p-3 bg-slate-900 rounded-xl border border-slate-800">
+                    <div class="flex items-center gap-3">
+                        <span class="font-black text-purple-400">#${idx + 1}</span>
+                        <span class="text-xl">${p.avatar}</span>
+                        <span class="font-bold text-white">${p.name}</span>
+                    </div>
+                    <span class="font-black text-amber-400">${p.score} pts</span>
+                </div>
+            `).join('');
+            if(window.confetti) confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
+        });
+
+        socket.on('game-ended', (leaderboard) => {
+            switchView('view-result');
+            const top3Div = document.getElementById('final-podium');
+            top3Div.innerHTML = leaderboard.slice(0, 3).map((p, idx) => `
+                <div class="glass p-4 rounded-2xl flex flex-col items-center ${idx === 0 ? 'order-2 border-amber-500/50 bg-amber-500/10' : idx === 1 ? 'order-1' : 'order-3'}">
+                    <span class="text-2xl mb-1">${idx === 0 ? '👑' : idx === 1 ? '🥈' : '🥉'}</span>
+                    <span class="text-3xl mb-1">${p.avatar}</span>
+                    <span class="font-bold text-sm truncate w-full text-white">${p.name}</span>
+                    <span class="text-xs text-amber-400 font-bold">${p.score} pts</span>
+                </div>
+            `).join('');
+            if(window.confetti) confetti({ particleCount: 200, spread: 100, origin: { y: 0.5 } });
+        });
+    </script>
+</body>
+</html>
